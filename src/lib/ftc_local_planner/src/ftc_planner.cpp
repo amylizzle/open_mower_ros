@@ -3,6 +3,7 @@
 
 #include <pluginlib/class_list_macros.h>
 #include "mbf_msgs/ExePathAction.h"
+#include <costmap_2d/obstacle_layer.h>
 
 PLUGINLIB_EXPORT_CLASS(ftc_local_planner::FTCPlanner, mbf_costmap_core::CostmapController)
 
@@ -32,6 +33,21 @@ namespace ftc_local_planner
         costmap_map_ = costmap->getCostmap();
         tf_buffer = tf;
 
+        // Obstacle avoidance needs the obstacle layer on its own, to tell detected obstacles
+        // apart from the map boundary (see obstacle_avoidance.h).
+        for (const auto &layer : *costmap->getLayeredCostmap()->getPlugins())
+        {
+            if (auto obstacle_layer = boost::dynamic_pointer_cast<costmap_2d::ObstacleLayer>(layer))
+            {
+                obstacle_layer_ = obstacle_layer.get();
+                break;
+            }
+        }
+        if (obstacle_layer_ == nullptr)
+        {
+            ROS_WARN("FTCLocalPlannerROS: costmap has no obstacle layer, obstacle avoidance is unavailable.");
+        }
+
         // Parameter for dynamic reconfigure
         reconfig_server = new dynamic_reconfigure::Server<FTCPlannerConfig>(private_nh);
         dynamic_reconfigure::Server<FTCPlannerConfig>::CallbackType cb = boost::bind(&FTCPlanner::reconfigureCB, this,
@@ -60,6 +76,7 @@ namespace ftc_local_planner
             c.restore_defaults = false;
         }
         config = c;
+        no_detour_at_index_ = -1; // avoidance parameters may have changed, search again
 
         // just to be sure
         current_movement_speed = config.speed_slow;
@@ -77,6 +94,8 @@ namespace ftc_local_planner
         global_plan = plan;
         current_index = 0;
         current_progress = 0.0;
+        blocked_until_ = -1;
+        no_detour_at_index_ = -1;
 
         last_time = ros::Time::now();
         current_movement_speed = config.speed_slow;
@@ -187,11 +206,22 @@ namespace ftc_local_planner
             current_state = new_planner_state;
         }
 
+        avoidObstacles();
+
         if (checkCollision(config.obstacle_lookahead))
         {
             cmd_vel.twist.linear.x = 0;
             cmd_vel.twist.angular.z = 0;
             is_crashed = true;
+            // Tell the caller (via getProgress) how far the obstacle goes, so it can resume after it.
+            // Only an obstacle within the poses checkCollision() looked at counts: one further
+            // ahead did not cause this stop.
+            if (obstacle_layer_ != nullptr)
+            {
+                blocked_until_ = avoidance::lastBlockedIndex(global_plan, current_index,
+                                                             current_index + config.obstacle_lookahead,
+                                                             *obstacle_layer_, config.avoidance_clearance);
+            }
             return RET_BLOCKED;
         }
 
@@ -593,6 +623,7 @@ namespace ftc_local_planner
     bool FTCPlanner::getProgress(PlannerGetProgressRequest &req, PlannerGetProgressResponse &res)
     {
         res.index = current_index;
+        res.blocked_until = blocked_until_;
         return true;
     }
 
@@ -639,9 +670,9 @@ namespace ftc_local_planner
         {
             geometry_msgs::PoseStamped x_pose;
             int index = current_index + i;
-            if (index > global_plan.size())
+            if (index >= global_plan.size())
             {
-                index = global_plan.size();
+                index = global_plan.size() - 1;
             }
             x_pose = global_plan[index];
 
@@ -666,6 +697,50 @@ namespace ftc_local_planner
             }
         }
         return false;
+    }
+
+    void FTCPlanner::avoidObstacles()
+    {
+        if (!config.avoid_obstacles || current_state != FOLLOWING || obstacle_layer_ == nullptr)
+        {
+            return;
+        }
+        // Searching for a detour is the expensive part. If the last search found none, don't repeat
+        // it every control cycle: search again once the robot has moved on to the next pose (about
+        // as often as the costmap itself is updated at mowing speed).
+        if (no_detour_at_index_ == current_index)
+        {
+            return;
+        }
+
+        // The control point is interpolated between current_index and current_index + 1, so
+        // only poses after those may move. No locking needed: move_base_flex holds the costmap
+        // mutex while it calls computeVelocityCommands() (CostmapControllerExecution, lock_costmap_).
+        auto result = avoidance::avoidObstacles(global_plan, current_index + 2, *obstacle_layer_, *costmap_map_, avoidanceParams());
+        if (result == avoidance::Result::DETOUR_PLANNED)
+        {
+            ROS_INFO("FTCLocalPlannerROS: Obstacle ahead, following a detour around it.");
+            nav_msgs::Path path;
+            path.header = global_plan.front().header;
+            path.poses = global_plan;
+            global_plan_pub.publish(path);
+        }
+        else if (result == avoidance::Result::NO_DETOUR)
+        {
+            ROS_WARN_THROTTLE(5, "FTCLocalPlannerROS: Obstacle ahead and no free detour around it.");
+            no_detour_at_index_ = current_index;
+        }
+    }
+
+    avoidance::Params FTCPlanner::avoidanceParams() const
+    {
+        avoidance::Params params;
+        params.lookahead = config.avoidance_lookahead;
+        params.clearance = config.avoidance_clearance;
+        params.max_offset = config.avoidance_max_offset;
+        params.offset_step = config.avoidance_offset_step;
+        params.ramp_distance = config.avoidance_ramp_distance;
+        return params;
     }
 
     bool FTCPlanner::checkOscillation(geometry_msgs::TwistStamped &cmd_vel)

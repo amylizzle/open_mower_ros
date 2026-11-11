@@ -23,6 +23,7 @@
 #include <rosbag/view.h>
 
 #include <EmergencyServiceInterfaceBase.hpp>
+#include <algorithm>
 #include <cmath>
 
 #include "../StateSubscriber.h"
@@ -301,15 +302,22 @@ bool MowingBehavior::create_mowing_plan(int area_index) {
   return true;
 }
 
-int getCurrentMowPathIndex() {
+/// Progress of the FTC planner along the path it was last given. Both indices are into that path.
+struct PlannerProgress {
+  int index = -1;          // pose the planner has reached, -1 if unknown
+  int blocked_until = -1;  // last pose blocked by the obstacle the planner stopped for, -1 if it did not
+};
+
+PlannerProgress getPlannerProgress() {
+  PlannerProgress progress;
   ftc_local_planner::PlannerGetProgress progressSrv;
-  int currentIndex = -1;
   if (pathProgressClient.call(progressSrv)) {
-    currentIndex = progressSrv.response.index;
+    progress.index = progressSrv.response.index;
+    progress.blocked_until = progressSrv.response.blocked_until;
   } else {
-    ROS_ERROR("MowingBehavior: getMowIndex() - Error getting progress from FTC planner");
+    ROS_ERROR("MowingBehavior: getPlannerProgress() - Error getting progress from FTC planner");
   }
-  return (currentIndex);
+  return progress;
 }
 
 void printNavState(int state) {
@@ -629,7 +637,7 @@ bool MowingBehavior::execute_mowing_plan() {
           }
           if (current_status.state_ == actionlib::SimpleClientGoalState::ACTIVE) {
             // show progress
-            int currentIndex = getCurrentMowPathIndex();
+            int currentIndex = getPlannerProgress().index;
             if (currentIndex != -1) {
               currentMowingPathIndex = exePathStartIndex + currentIndex;
             }
@@ -666,8 +674,18 @@ bool MowingBehavior::execute_mowing_plan() {
         } else {
           // we didnt drive all points in the mow path, so we wait for GPS or execute the recovery behaviors.
 
-          // currentMowingPathIndex might be 0 if we never consumed one of the points, we advance at least 1 point
-          if (currentMowingPathIndex == 0) currentMowingPathIndex++;
+          const int blocked_until = getPlannerProgress().blocked_until;
+          const bool blocked_by_obstacle = blocked_until >= 0;
+          if (blocked_by_obstacle) {
+            // The planner stopped for an obstacle: resume after it rather than right in front of it.
+            // The next FIRST POINT drive then goes around the obstacle to get there.
+            currentMowingPathIndex = std::max(currentMowingPathIndex, exePathStartIndex + blocked_until + 1);
+            ROS_INFO_STREAM("MowingBehavior: (MOW) Path blocked by an obstacle, resuming after it at index "
+                            << currentMowingPathIndex);
+          } else if (currentMowingPathIndex == 0) {
+            // currentMowingPathIndex might be 0 if we never consumed one of the points, we advance at least 1 point
+            currentMowingPathIndex++;
+          }
           if (!requested_pause_flag) {
             // Path following failed (not a user-requested pause/abort). ExePath, unlike the
             // MoveBase action, never invokes MBF recovery on its own, so trigger it explicitly
@@ -703,8 +721,14 @@ bool MowingBehavior::execute_mowing_plan() {
                 }
               }
             }
-            ROS_INFO_STREAM("MowingBehavior: (MOW) PAUSED due to MBF Error at " << currentMowingPathIndex);
-            publishMowerEvent("NAVIGATION_ERROR");
+            if (blocked_by_obstacle) {
+              // Expected and handled above, so not reported as an error.
+              publishMowerEvent("OBSTACLE_SKIPPED",
+                                json{{"path", currentMowingPath}, {"resume_index", currentMowingPathIndex}});
+            } else {
+              ROS_INFO_STREAM("MowingBehavior: (MOW) PAUSED due to MBF Error at " << currentMowingPathIndex);
+              publishMowerEvent("NAVIGATION_ERROR");
+            }
             paused = true;
             update_actions();
           }

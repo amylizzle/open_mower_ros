@@ -1,2 +1,5 @@
 ---
 uint32 index
+# When the planner stopped because the path ahead is blocked by an obstacle: index of the last
+# blocked pose (resume after it). -1 otherwise.
+int32 blocked_until

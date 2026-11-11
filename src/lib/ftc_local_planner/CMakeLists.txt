@@ -68,6 +68,7 @@ catkin_package(
 
 add_library(ftc_local_planner 
 	    src/ftc_planner.cpp
+        src/obstacle_avoidance.cpp
         src/oscillation_detector.cpp)
 target_link_libraries(ftc_local_planner ${catkin_LIBRARIES})
 add_dependencies(ftc_local_planner ${catkin_EXPORTED_TARGETS} ${${PROJECT_NAME}_EXPORTED_TARGETS})
@@ -90,4 +91,8 @@ install(DIRECTORY include/${PROJECT_NAME}/
   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
   PATTERN ".svn" EXCLUDE
 )
- 
+
+if (CATKIN_ENABLE_TESTING)
+  catkin_add_gtest(test_obstacle_avoidance test/test_obstacle_avoidance.cpp src/obstacle_avoidance.cpp)
+  target_link_libraries(test_obstacle_avoidance ${catkin_LIBRARIES})
+endif()

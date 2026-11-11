@@ -2,8 +2,18 @@ local_costmap:
   update_frequency: 5.0
   publish_frequency: 2.0
   rolling_window: true
-  width: 1.5
-  height: 1.5
-  resolution: 0.15
+  # Window size depends on whether FTCPlanner's obstacle avoidance (avoid_obstacles) is used.
+  #
+  # With avoidance: a detour has to fit inside the window from where it starts (up to
+  # avoidance_lookahead ahead) to where it rejoins the path (past the obstacle plus
+  # avoidance_ramp_distance), and the cells must resolve avoidance_offset_step. 3 m each way also
+  # matches the obstacle layer's obstacle_range. About 144x the cells of the setting below.
+  width: 6.0
+  height: 6.0
+  resolution: 0.05
+  # Without avoidance, the original, much cheaper window is enough:
+  # width: 1.5
+  # height: 1.5
+  # resolution: 0.15
   inflation_layer:
     inflation_radius: 0.0

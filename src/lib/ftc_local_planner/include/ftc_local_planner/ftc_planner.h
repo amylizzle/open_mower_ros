@@ -5,6 +5,7 @@
 #include <ros/ros.h>
 #include "ftc_local_planner/PlannerGetProgress.h"
 #include "ftc_local_planner/oscillation_detector.h"
+#include "ftc_local_planner/obstacle_avoidance.h"
 
 #include <nav_msgs/Odometry.h>
 #include <nav_msgs/Path.h>
@@ -51,6 +52,9 @@ namespace ftc_local_planner
         tf2_ros::Buffer *tf_buffer;
         costmap_2d::Costmap2DROS *costmap;
         costmap_2d::Costmap2D* costmap_map_;   
+        costmap_2d::Costmap2D* obstacle_layer_ = nullptr; // obstacle layer of costmap, used for avoidance
+        int blocked_until_ = -1; // last blocked plan index when we stopped for an obstacle, see PlannerGetProgress
+        int64_t no_detour_at_index_ = -1; // current_index at which the last detour search found nothing, -1 if none
 
         std::vector<geometry_msgs::PoseStamped> global_plan;
         ros::Publisher global_point_pub;
@@ -106,6 +110,14 @@ namespace ftc_local_planner
          * @return true if collision will happen.
          */
         bool checkCollision(int max_points);
+
+        /**
+         * @brief if the plan ahead is blocked by an obstacle, move that part of the plan sideways around it
+         * @brief (see obstacle_avoidance.h). Does nothing unless config.avoid_obstacles is set.
+         */
+        void avoidObstacles();
+
+        avoidance::Params avoidanceParams() const;
 
         /**
          * @brief check if robot oscillates (only angular). Can be used to do some recovery

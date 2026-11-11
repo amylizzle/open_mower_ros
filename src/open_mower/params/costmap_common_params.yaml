@@ -18,3 +18,20 @@ obstacle_layer:
   max_obstacle_height: 1.0
   obstacle_range: 3.0
   raytrace_range: 4.0
+  # Generic obstacle input: anything that detects obstacles (camera, bumper, the simulator's
+  # sim_obstacles.py) publishes them here as a PointCloud2. Marking only - nothing provides
+  # clearing data yet. With no publisher this source does nothing.
+  #
+  # Known limitation: these parameters are loaded into both costmaps. The local costmap rolls
+  # with the robot, so its marks drop out of the window, but the global costmap does not: a
+  # mark there (including a false positive, or an obstacle that has since been moved) stays
+  # lethal, with the global inflation around it, until /move_base_flex/clear_costmaps is
+  # called or move_base_flex restarts. Fix once real sensors exist: give this source clearing
+  # data, or keep it out of the global costmap.
+  observation_sources: obstacle_points
+  obstacle_points:
+    data_type: PointCloud2
+    topic: /obstacles/points
+    sensor_frame: base_link
+    marking: true
+    clearing: false

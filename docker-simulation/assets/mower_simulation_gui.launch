@@ -43,6 +43,13 @@
         <param name="use_motion_vector_orientation" value="true"/>
     </node>
 
+    <!-- Fake obstacle sensor: click with rviz's "Publish Point" tool to drop an obstacle in
+         the mower's way. Publishes /obstacles/points for the costmap's obstacle layer.
+         The FTC planner ignores obstacles unless enabled (both are off by default), e.g.:
+           rosrun dynamic_reconfigure dynparam set /move_base_flex/FTCPlanner "{check_obstacles: true, avoid_obstacles: true}"
+         Obstacle size: ~radius (metres, default 0.2). -->
+    <node name="sim_obstacles" pkg="mower_simulation" type="sim_obstacles.py"/>
+
     <node name="rviz" pkg="rviz" type="rviz" args="-d $(find open_mower)/rviz/sim_mower_logic.rviz"
           required="true"/>
 </launch>
