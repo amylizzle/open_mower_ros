@@ -44,7 +44,8 @@
     </node>
 
     <!-- Fake obstacle sensor: click with rviz's "Publish Point" tool to drop an obstacle in
-         the mower's way. Publishes /obstacles/points for the costmap's obstacle layer.
+         the mower's way. Reports it on /obstacles/new; mower_comms_v2 in the open_mower_ros
+         container keeps it and publishes it on /obstacles/points for the costmap.
          The FTC planner ignores obstacles unless enabled (both are off by default), e.g.:
            rosrun dynamic_reconfigure dynparam set /move_base_flex/FTCPlanner "{check_obstacles: true, avoid_obstacles: true}"
          Obstacle size: ~radius (metres, default 0.2). -->

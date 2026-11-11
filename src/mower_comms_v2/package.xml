@@ -25,6 +25,8 @@
     <depend>xesc_msgs</depend>
     <depend>nmea_msgs</depend>
     <depend>std_msgs</depend>
+    <depend>tf2_ros</depend>
+    <depend>tf2_geometry_msgs</depend>
 
 
     <!-- The export tag contains other, unspecified, tags -->

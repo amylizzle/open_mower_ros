@@ -18,8 +18,9 @@ obstacle_layer:
   max_obstacle_height: 1.0
   obstacle_range: 3.0
   raytrace_range: 4.0
-  # Generic obstacle input: anything that detects obstacles (camera, bumper, the simulator's
-  # sim_obstacles.py) publishes them here as a PointCloud2. Marking only - nothing provides
+  # All known obstacles, as a PointCloud2. Normally published by mower_comms_v2's
+  # ObstacleServiceInterface, which collects firmware contacts (e.g. a bumper) and new obstacles
+  # from /obstacles/new (camera, the simulator's sim_obstacles.py). Marking only - nothing provides
   # clearing data yet. With no publisher this source does nothing.
   #
   # Known limitation: these parameters are loaded into both costmaps. The local costmap rolls

@@ -36,6 +36,7 @@
 #include "services/imu_service/imu_service.hpp"
 #include "services/meta_service/meta_service.hpp"
 #include "services/mower_service/mower_service.hpp"
+#include "services/obstacle_service/obstacle_service.hpp"
 #include "services/power_service/power_service.hpp"
 
 ros::Publisher status_pub;
@@ -110,6 +111,7 @@ int main(int argc, char** argv) {
   ImuService imu_service{xbot::service_ids::IMU, robot};
   PowerService power_service{xbot::service_ids::POWER, robot};
   GpsService gps_service{xbot::service_ids::GPS, robot};
+  ObstacleService obstacle_service{xbot::service_ids::OBSTACLE, paramNh};
 
   meta_service.start();
   emergency_service.start();
@@ -118,6 +120,7 @@ int main(int argc, char** argv) {
   imu_service.start();
   power_service.start();
   gps_service.start();
+  obstacle_service.start();
 
   // ROS-layer RPCs + MQTT state stream for driving the sim into test states from the app.
   SimRpc sim_rpc{n, robot};

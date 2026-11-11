@@ -35,6 +35,7 @@
 #include "EmergencyServiceInterface.h"
 #include "GpsServiceInterface.h"
 #include "HighLevelServiceInterface.h"
+#include "ObstacleServiceInterface.h"
 #include "ImuServiceInterface.h"
 #include "InputServiceInterface.h"
 #include "MetaServiceInterface.h"
@@ -65,6 +66,7 @@ std::unique_ptr<BmsServiceInterface> bms_service = nullptr;
 std::unique_ptr<GpsServiceInterface> gps_service = nullptr;
 std::unique_ptr<InputServiceInterface> input_service = nullptr;
 std::unique_ptr<HighLevelServiceInterface> high_level_service = nullptr;
+std::unique_ptr<ObstacleServiceInterface> obstacle_service = nullptr;
 std::unique_ptr<MetaServiceInterface> meta_service = nullptr;
 
 // Motion and mower is gated off until the firmware major version has been confirmed compatible (== 1).
@@ -243,6 +245,10 @@ int main(int argc, char** argv) {
   // HighLevel service
   high_level_service = std::make_unique<HighLevelServiceInterface>(xbot::service_ids::HIGH_LEVEL, ctx);
   high_level_service->Start();
+
+  // Obstacles: firmware contacts (e.g. a bumper) and /obstacles/new, published on /obstacles/points
+  obstacle_service = std::make_unique<ObstacleServiceInterface>(xbot::service_ids::OBSTACLE, ctx, n, paramNh);
+  obstacle_service->Start();
 
   // All subscriptions, timers and service servers are registered after all service interfaces are
   // fully constructed, so callbacks can never fire on null pointers.
